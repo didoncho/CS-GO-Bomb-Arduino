@@ -1,3 +1,6 @@
+// link to tinkercad - https://www.tinkercad.com/things/hBKjYc258BL-csgo-bomb/editel
+
+
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_LEDBackpack.h>
