@@ -1,0 +1,165 @@
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_LEDBackpack.h>
+#include <Keypad.h>
+
+// --- Display Setup ---
+Adafruit_7segment matrix = Adafruit_7segment();
+int remainingSeconds = 23; // Total bomb time
+
+const byte numRows = 4;
+const byte numCols = 4;
+
+int ledPins[] = {10, 11, 12, 13};
+int numLeds = 4;
+
+bool defused = false;
+bool exploded = false;
+
+// Timing Variables
+unsigned long secondMillis = 0;
+unsigned long previousMillis = 0;
+const long interval = 200; // Blink speed
+int currentLed = 0;
+int blinkCount = 0;
+bool ledState = LOW;
+
+String correctCode = "7355608"; // Actual CS:GO code
+String enteredCode = "";
+
+char keymap[numRows][numCols] = 
+{
+  {'1', '2', '3', 'A'},
+  {'4', '5', '6', 'B'},
+  {'7', '8', '9', 'C'},
+  {'*', '0', '#', 'D'}
+};
+
+byte rowPins[numRows] = {9, 8, 7, 6};
+byte colPins[numCols] = {5, 4, 3, 2};
+
+Keypad myKeypad = Keypad(makeKeymap(keymap), rowPins, colPins, numRows, numCols);
+
+void setup()
+{
+  Serial.begin(9600);
+  
+  // Initialize Display
+  matrix.begin(0x70); // Default I2C address
+  matrix.setBrightness(10);
+
+  for (int i = 0; i < numLeds; i++) {
+    pinMode(ledPins[i], OUTPUT);
+  }
+
+  Serial.println("BOMB PLANTED! [7355608]");
+}
+
+void loop()
+{ 
+  if (defused || exploded) {
+    // If game is over, stop
+    return; 
+  }
+
+  checkKeypad();
+  updateTimer();
+  updateBombTick();
+}
+
+void updateTimer() {
+  unsigned long currentMillis = millis();
+  
+  // Update the countdown every 1 second
+  if (currentMillis - secondMillis >= 1000) {
+    secondMillis = currentMillis;
+    
+    if (remainingSeconds > 0) {
+      remainingSeconds--;
+    }
+    
+    if (exploded) {
+        matrix.print(0, DEC);
+        matrix.drawColon(true);
+        matrix.writeDisplay();
+        return; 
+    }
+    
+    // Display formatting (MM:SS)
+    int displayValue = (remainingSeconds / 60) * 100 + (remainingSeconds % 60);
+    matrix.print(displayValue, DEC);
+    matrix.drawColon(true);
+    matrix.writeDisplay();
+  }
+}
+
+// -------- BOMB LOGIC --------
+void updateBombTick() {
+  unsigned long currentMillis = millis();
+
+  if (currentMillis - previousMillis >= interval) {
+    previousMillis = currentMillis;
+
+    if (currentLed < numLeds) {
+      ledState = !ledState;
+      digitalWrite(ledPins[currentLed], ledState);
+
+      if (ledState == LOW) { // One full blink completed
+        blinkCount++;
+      }
+
+      if (blinkCount >= 14) {
+        digitalWrite(ledPins[currentLed], HIGH); // Leave it on
+        currentLed++;   // Move to next LED
+        blinkCount = 0; // Reset count for next LED
+      }
+    } else {
+      // All 4 LEDs are now solid HIGH
+      triggerExplosion();
+    }
+  }
+  
+  // Secondary explosion trigger if clock hits zero
+  if (remainingSeconds <= 0 && !exploded)
+  {
+    triggerExplosion();
+  }
+}
+
+// -------- KEYPAD HANDLING --------
+void checkKeypad() {
+  char key = myKeypad.getKey();
+  
+  if (key != NO_KEY) {
+    if (key == '#') {
+      if (enteredCode == correctCode) {
+        defused = true;
+        allLedsOff();
+        Serial.println("\nBOMB DEFUSED. Counter-Terrorists Win.");
+      } else {
+        Serial.println("\nWRONG CODE!");
+        enteredCode = "";
+      }
+    } else if (key == '*') {
+      enteredCode = "";
+      Serial.println("\nCleared");
+    } else {
+      enteredCode += key;
+      Serial.print(key);
+    }
+  }
+}
+
+void allLedsOff() {
+  for (int i = 0; i < numLeds; i++) {
+    digitalWrite(ledPins[i], LOW);
+  }
+}
+
+void triggerExplosion() {
+  exploded = true;
+  matrix.print(0, DEC); // Force display to 00:00
+  matrix.drawColon(true);
+  matrix.writeDisplay();
+  Serial.println("\nBOOM! Terrorists Win.");
+}
